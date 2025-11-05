@@ -13,7 +13,12 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.developer.sbm.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "We need your permission to use your camera",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -21,10 +26,27 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.developer.sbm.mobile",
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "We need your permission to use your camera"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "9e18ed3e-fa99-4990-a4c2-e7ce25811726"
+      }
     }
   }
 }
