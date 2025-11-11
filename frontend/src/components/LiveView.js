@@ -35,11 +35,8 @@ function LiveView({ onUpdateStats }) {
     if (!keypoints || keypoints.length === 0) return false;
     const need = [
       "leftShoulder",
-      "rightShoulder",
       "leftElbow",
-      "rightElbow",
       "leftWrist",
-      "rightWrist",
     ];
     return need.every((part) => {
       const kp = keypoints.find((k) => k.part === part);
