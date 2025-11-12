@@ -1,0 +1,149 @@
+// Prisma schema for TracKing backend
+// Database: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ATHLETE
+  COACH
+}
+
+enum ExerciseCode {
+  BICEP_CURL
+  SQUAT
+  BENCH_PRESS
+}
+
+model User {
+  id          String   @id @default(cuid())
+  cognitoSub  String   @unique
+  email       String   @unique
+  name        String
+  role        Role
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  coachLinks   CoachAthleteLink[] @relation("CoachLinks")
+  athleteLinks CoachAthleteLink[] @relation("AthleteLinks")
+  createdExercises Exercise[]
+  workoutTemplates WorkoutTemplate[] @relation("CoachTemplates")
+  assignedWorkouts AssignedWorkout[] @relation("AthleteAssignments")
+  sessions     Session[] @relation("AthleteSessions")
+}
+
+model CoachAthleteLink {
+  id        String @id @default(cuid())
+  coachId   String
+  athleteId String
+
+  coach     User   @relation("CoachLinks", fields: [coachId], references: [id], onDelete: Cascade)
+  athlete   User   @relation("AthleteLinks", fields: [athleteId], references: [id], onDelete: Cascade)
+
+  @@unique([coachId, athleteId])
+}
+
+model Exercise {
+  id          String        @id @default(cuid())
+  name        String
+  code        ExerciseCode
+  description String?
+  createdById String?
+  createdBy   User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  workoutTemplateExercises WorkoutTemplateExercise[]
+  sessions     Session[]
+}
+
+model WorkoutTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  coachId     String
+  coach       User     @relation("CoachTemplates", fields: [coachId], references: [id], onDelete: Cascade)
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  exercises   WorkoutTemplateExercise[]
+  assigned    AssignedWorkout[]
+}
+
+model WorkoutTemplateExercise {
+  id                String          @id @default(cuid())
+  workoutTemplateId String
+  exerciseId        String
+  order             Int
+  targetSets        Int
+  targetReps        Int
+
+  workoutTemplate   WorkoutTemplate @relation(fields: [workoutTemplateId], references: [id], onDelete: Cascade)
+  exercise          Exercise        @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+
+  @@index([workoutTemplateId])
+  @@index([exerciseId])
+}
+
+model AssignedWorkout {
+  id                String   @id @default(cuid())
+  workoutTemplateId String
+  athleteId         String
+  startDate         DateTime
+  endDate           DateTime
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  workoutTemplate   WorkoutTemplate @relation(fields: [workoutTemplateId], references: [id], onDelete: Cascade)
+  athlete           User           @relation("AthleteAssignments", fields: [athleteId], references: [id], onDelete: Cascade)
+  sessions          Session[]
+
+  @@index([athleteId])
+}
+
+model Session {
+  id                String   @id @default(cuid())
+  athleteId         String
+  assignedWorkoutId String?
+  exerciseId        String
+  startTime         DateTime @default(now())
+  endTime           DateTime?
+  totalReps         Int      @default(0)
+  correctReps       Int      @default(0)
+  formScoreAvg      Float    @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  athlete           User     @relation("AthleteSessions", fields: [athleteId], references: [id], onDelete: Cascade)
+  assignedWorkout   AssignedWorkout? @relation(fields: [assignedWorkoutId], references: [id], onDelete: SetNull)
+  exercise          Exercise @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+  reps              Rep[]
+
+  @@index([athleteId])
+  @@index([assignedWorkoutId])
+  @@index([exerciseId])
+}
+
+model Rep {
+  id         String   @id @default(cuid())
+  sessionId  String
+  repNumber  Int
+  timestamp  DateTime
+  formScore  Float
+  isCorrect  Boolean
+  angleDown  Float?
+  angleUp    Float?
+
+  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
