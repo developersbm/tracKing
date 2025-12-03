@@ -61,47 +61,23 @@ app.post('/api/start-workout', async (req, res) => {
   
   console.log(`Starting workout - Session: ${sessionId}, User: ${userId}`);
   
-  // Update server state
+  // Update server state (hardware will see this via heartbeat response)
   hardwareState.sessionActive = true;
   hardwareState.sessionId = sessionId;
   hardwareState.userId = userId;
   hardwareState.repCount = 0;
   
-  // Send command to TTGO hardware if connected
-  if (hardwareState.deviceIp && hardwareState.isConnected) {
-    try {
-      const response = await axios.post(`http://${hardwareState.deviceIp}/start`, {
-        sessionId,
-        userId
-      }, { timeout: 3000 });
-      
-      console.log('Hardware started successfully:', response.data);
-      
-      res.json({
-        success: true,
-        message: 'Workout started on both software and hardware',
-        hardwareConnected: true
-      });
-    } catch (error) {
-      console.error('Failed to start hardware:', error.message);
-      
-      res.json({
-        success: true,
-        message: 'Workout started on software only (hardware not responding)',
-        hardwareConnected: false,
-        warning: 'Hardware device did not respond'
-      });
-    }
-  } else {
-    console.log('No hardware device connected');
-    
-    res.json({
-      success: true,
-      message: 'Workout started on software only',
-      hardwareConnected: false,
-      warning: 'No hardware device registered'
-    });
-  }
+  // Hardware will discover session is active via next heartbeat
+  const isHardwareConnected = hardwareState.deviceIp && hardwareState.isConnected;
+  
+  res.json({
+    success: true,
+    message: isHardwareConnected 
+      ? 'Workout started (hardware will sync on next heartbeat)' 
+      : 'Workout started on software only',
+    hardwareConnected: isHardwareConnected,
+    sessionId: sessionId
+  });
 });
 
 // ===== END WORKOUT =====
@@ -111,24 +87,9 @@ app.post('/api/end-workout', async (req, res) => {
   
   console.log(`Ending workout - Session: ${sessionId}`);
   
-  // Send command to TTGO hardware if connected
-  let finalRepCount = hardwareState.repCount;
+  const finalRepCount = hardwareState.repCount;
   
-  if (hardwareState.deviceIp && hardwareState.isConnected) {
-    try {
-      const response = await axios.post(`http://${hardwareState.deviceIp}/stop`, {
-        sessionId
-      }, { timeout: 3000 });
-      
-      console.log('Hardware stopped successfully:', response.data);
-      finalRepCount = response.data.finalRepCount || hardwareState.repCount;
-      
-    } catch (error) {
-      console.error('Failed to stop hardware:', error.message);
-    }
-  }
-  
-  // Reset server state
+  // Reset server state (hardware will see this via next heartbeat)
   hardwareState.sessionActive = false;
   hardwareState.sessionId = null;
   hardwareState.userId = null;

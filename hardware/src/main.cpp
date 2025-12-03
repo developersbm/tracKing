@@ -7,7 +7,7 @@
 // CONFIGURATION
 const char* WIFI_SSID = "iPhone de Sebas";
 const char* WIFI_PASSWORD = "Suma1221";
-const char* BACKEND_URL = "http://172.20.10.1:3001";
+const char* BACKEND_URL = "http://54.183.150.186:3001";
 
 // PIN DEFINITIONS
 const int RED_LED   = 2; // Red LED for bad form/error
