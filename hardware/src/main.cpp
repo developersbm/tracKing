@@ -1,7 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
-#include <WebServer.h>
 #include <ArduinoJson.h>
   
 // CONFIGURATION
@@ -25,17 +24,11 @@ String currentSessionId = "";
 String currentUserId = "";
 int repCount = 0;
 
-// BUTTON DEBOUNCING
-bool lastBtnState = HIGH;
-unsigned long lastDebounceTime = 0;
-const unsigned long DEBOUNCE_DELAY = 50;  // 50ms debounce
-
 // TIMING
 unsigned long lastHeartbeat = 0;
 const unsigned long HEARTBEAT_INTERVAL = 5000;  // Send heartbeat every 5 seconds
-
-// WEB SERVER (for receiving commands from backend)
-WebServer server(80);
+unsigned long lastPoll = 0;
+const unsigned long POLL_INTERVAL = 1500;  // Poll for commands every 1.5 seconds
 
 // LED & AUDIO FEEDBACK FUNCTIONS
 
@@ -144,219 +137,95 @@ void sendHeartbeat() {
   http.end();
 }
 
-// Send rep update to backend
-void sendRepUpdate() {
+// Poll backend for pending commands
+void pollForCommands() {
   if (WiFi.status() != WL_CONNECTED) return;
-  if (!sessionActive) return;
   
   HTTPClient http;
-  String url = String(BACKEND_URL) + "/api/hardware-rep";
+  String url = String(BACKEND_URL) + "/api/poll-commands";
   http.begin(url);
-  http.addHeader("Content-Type", "application/json");
   
-  // Create JSON payload
-  StaticJsonDocument<300> doc;
-  doc["sessionId"] = currentSessionId;
-  doc["repCount"] = repCount;
-  doc["timestamp"] = millis();
+  int httpCode = http.GET();
   
-  String payload;
-  serializeJson(doc, payload);
-  
-  int httpCode = http.POST(payload);
-  
-  if (httpCode > 0) {
-    Serial.println("Rep logged to backend: " + String(repCount));
-  } else {
-    Serial.println("Failed to log rep to backend");
+  if (httpCode == 200) {
+    String payload = http.getString();
+    
+    StaticJsonDocument<1024> doc;
+    DeserializationError error = deserializeJson(doc, payload);
+    
+    if (!error) {
+      JsonArray commands = doc["commands"];
+      
+      for (JsonObject cmd : commands) {
+        String type = cmd["type"].as<String>();
+        
+        if (type == "start") {
+          // Handle start workout
+          currentSessionId = cmd["sessionId"].as<String>();
+          currentUserId = cmd["userId"].as<String>();
+          sessionActive = true;
+          repCount = 0;
+          
+          Serial.println("\\n========================================");
+          Serial.println("\u2713 WORKOUT STARTED!");
+          Serial.println("Session ID: " + currentSessionId);
+          Serial.println("User ID: " + currentUserId);
+          Serial.println("Waiting for reps from camera...");
+          Serial.println("========================================\\n");
+          
+          // Visual/audio feedback
+          digitalWrite(GREEN_LED, HIGH);
+          ledcWriteTone(BUZZER_CHANNEL, 1200);
+          delay(200);
+          ledcWriteTone(BUZZER_CHANNEL, 0);
+          digitalWrite(GREEN_LED, LOW);
+          
+        } else if (type == "stop") {
+          // Handle stop workout
+          Serial.println("\\n========================================");
+          Serial.println("\u2713 WORKOUT ENDED!");
+          Serial.println("Final rep count: " + String(repCount));
+          Serial.println("Session ID: " + currentSessionId);
+          Serial.println("========================================\\n");
+          
+          celebrationPattern();
+          
+          sessionActive = false;
+          currentSessionId = "";
+          currentUserId = "";
+          repCount = 0;
+          ledsOff();
+          
+        } else if (type == "rep-feedback") {
+          // Handle rep feedback
+          int repNumber = cmd["repNumber"];
+          bool isCorrect = cmd["isCorrect"];
+          String repDuration = cmd["repDuration"].as<String>();
+          
+          Serial.println("\\n========================================");
+          Serial.println("REP #" + String(repNumber));
+          Serial.println("Form: " + String(isCorrect ? "GOOD" : "BAD"));
+          Serial.println("Duration: " + repDuration + "s");
+          Serial.println("========================================\\n");
+          
+          repCount = repNumber;
+          
+          if (isCorrect) {
+            goodRep();
+          } else {
+            badRep();
+          }
+        }
+      }
+    }
   }
   
   http.end();
 }
 
-// WEB SERVER HANDLERS (receive commands from backend)
 
-// Handle /start command - called when user clicks "Start Workout" in app
-void handleStart() {
-  Serial.println("COMMAND: START WORKOUT");
-  
-  // Parse JSON body
-  if (server.hasArg("plain")) {
-    String body = server.arg("plain");
-    
-    StaticJsonDocument<300> doc;
-    DeserializationError error = deserializeJson(doc, body);
-    
-    if (!error) {
-      currentSessionId = doc["sessionId"].as<String>();
-      currentUserId = doc["userId"].as<String>();
-      
-      Serial.println("Session ID: " + currentSessionId);
-      Serial.println("User ID: " + currentUserId);
-      
-      // Start the session
-      sessionActive = true;
-      repCount = 0;
-      
-      // Visual/audio feedback
-      digitalWrite(GREEN_LED, HIGH);
-      ledcWriteTone(BUZZER_CHANNEL, 1200);
-      delay(200);
-      ledcWriteTone(BUZZER_CHANNEL, 0);
-      digitalWrite(GREEN_LED, LOW);
-      
-      Serial.println("\n========================================");
-      Serial.println("✓ WORKOUT STARTED!");
-      Serial.println("Session ID: " + currentSessionId);
-      Serial.println("User ID: " + currentUserId);
-      Serial.println("Waiting for reps from camera...");
-      Serial.println("========================================\n");
-      
-      // Send success response
-      StaticJsonDocument<200> responseDoc;
-      responseDoc["success"] = true;
-      responseDoc["message"] = "Session started";
-      responseDoc["repCount"] = repCount;
-      
-      String response;
-      serializeJson(responseDoc, response);
-      server.send(200, "application/json", response);
-    } else {
-      server.send(400, "application/json", "{\"success\":false,\"error\":\"Invalid JSON\"}");
-    }
-  } else {
-    server.send(400, "application/json", "{\"success\":false,\"error\":\"No body\"}");
-  }
-}
 
-// Handle /stop command - called when user clicks "End Workout" in app
-void handleStop() {
-  Serial.println("COMMAND: STOP WORKOUT");
-  
-  Serial.println("\n========================================");
-  Serial.println("✓ WORKOUT ENDED!");
-  Serial.println("Final rep count: " + String(repCount));
-  Serial.println("Session ID: " + currentSessionId);
-  Serial.println("========================================\n");
-  
-  // Celebration pattern
-  celebrationPattern();
-  
-  // Send response with final rep count
-  StaticJsonDocument<200> responseDoc;
-  responseDoc["success"] = true;
-  responseDoc["message"] = "Session ended";
-  responseDoc["finalRepCount"] = repCount;
-  
-  String response;
-  serializeJson(responseDoc, response);
-  server.send(200, "application/json", response);
-  
-  // Reset session state
-  sessionActive = false;
-  currentSessionId = "";
-  currentUserId = "";
-  repCount = 0;
-  
-  ledsOff();
-  
-  Serial.println("Session ended");
-}
 
-// Handle /rep-feedback - called by backend when frontend detects a rep
-void handleRepFeedback() {
-  Serial.println("COMMAND: REP FEEDBACK");
-  
-  if (server.hasArg("plain")) {
-    String body = server.arg("plain");
-    
-    StaticJsonDocument<300> doc;
-    DeserializationError error = deserializeJson(doc, body);
-    
-    if (!error) {
-      int repNumber = doc["repNumber"];
-      bool isCorrect = doc["isCorrect"];
-      String repDuration = doc["repDuration"].as<String>();
-      
-      Serial.println("\n========================================");
-      Serial.println("REP #" + String(repNumber));
-      Serial.println("Form: " + String(isCorrect ? "GOOD" : "BAD"));
-      Serial.println("Duration: " + repDuration + "s");
-      Serial.println("========================================\n");
-      
-      // Update local rep count
-      repCount = repNumber;
-      
-      // Trigger appropriate feedback
-      if (isCorrect) {
-        goodRep();
-      } else {
-        badRep();
-      }
-      
-      server.send(200, "application/json", "{\"success\":true}");
-    } else {
-      server.send(400, "application/json", "{\"success\":false,\"error\":\"Invalid JSON\"}");
-    }
-  } else {
-    server.send(400, "application/json", "{\"success\":false,\"error\":\"No body\"}");
-  }
-}
-
-// Handle /status request
-void handleStatus() {
-  StaticJsonDocument<300> doc;
-  doc["sessionActive"] = sessionActive;
-  doc["sessionId"] = currentSessionId;
-  doc["userId"] = currentUserId;
-  doc["repCount"] = repCount;
-  doc["wifiConnected"] = (WiFi.status() == WL_CONNECTED);
-  doc["ipAddress"] = WiFi.localIP().toString();
-  
-  String response;
-  serializeJson(doc, response);
-  server.send(200, "application/json", response);
-}
-
-// BUTTON REP COUNTING
-
-void handleButton() {
-  // Read button state
-  bool currentBtnState = digitalRead(BTN_PIN);
-  
-  // Debouncing logic
-  if (currentBtnState != lastBtnState) {
-    lastDebounceTime = millis();
-  }
-  
-  if ((millis() - lastDebounceTime) > DEBOUNCE_DELAY) {
-    // Button state has been stable for DEBOUNCE_DELAY ms
-    
-    // Detect button press (LOW = pressed with INPUT_PULLUP)
-    if (lastBtnState == HIGH && currentBtnState == LOW) {
-      
-      if (sessionActive) {
-        // Button pressed during active session = count a rep
-        repCount++;
-        
-        Serial.println("\n>>> REP #" + String(repCount) + " <<<");
-        
-        // For now, treat all reps as "good" (you can add form logic later)
-        goodRep();
-        
-        // Send rep update to backend
-        sendRepUpdate();
-        
-      } else {
-        // Button pressed but no active session
-        Serial.println("Button pressed, but no active workout session");
-        badRep();  // Error feedback
-      }
-    }
-  }
-  
-  lastBtnState = currentBtnState;
-}
 
 // ============================================
 // SETUP
@@ -371,7 +240,6 @@ void setup() {
   // Configure GPIO pins
   pinMode(RED_LED, OUTPUT);
   pinMode(GREEN_LED, OUTPUT);
-  pinMode(BTN_PIN, INPUT_PULLUP);
   
   digitalWrite(RED_LED, LOW);
   digitalWrite(GREEN_LED, LOW);
@@ -407,15 +275,8 @@ void setup() {
     // Register device with backend
     registerDevice();
     
-    // Start web server to receive commands
-    server.on("/start", HTTP_POST, handleStart);
-    server.on("/stop", HTTP_POST, handleStop);
-    server.on("/rep-feedback", HTTP_POST, handleRepFeedback);
-    server.on("/status", HTTP_GET, handleStatus);
-    server.begin();
-    
-    Serial.println("✓ Web server started on port 80");
     Serial.println("Backend URL: " + String(BACKEND_URL));
+    Serial.println("Polling backend for commands every 1.5 seconds...");
     
   } else {
     Serial.println("\n✗ WiFi connection failed!");
@@ -436,19 +297,20 @@ void setup() {
 // MAIN LOOP
 
 void loop() {
-  // Handle incoming HTTP requests from backend
-  server.handleClient();
-  
-  // Handle button presses for rep counting
-  handleButton();
+  unsigned long now = millis();
   
   // Send periodic heartbeat to backend
-  unsigned long now = millis();
   if (now - lastHeartbeat >= HEARTBEAT_INTERVAL) {
     lastHeartbeat = now;
     sendHeartbeat();
   }
   
+  // Poll for commands from backend
+  if (now - lastPoll >= POLL_INTERVAL) {
+    lastPoll = now;
+    pollForCommands();
+  }
+  
   // Small delay to prevent excessive CPU usage
-  delay(10);
+  delay(100);
 }
