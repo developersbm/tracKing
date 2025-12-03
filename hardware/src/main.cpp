@@ -4,8 +4,8 @@
 #include <ArduinoJson.h>
   
 // CONFIGURATION
-const char* WIFI_SSID = "iPhone de Sebas";
-const char* WIFI_PASSWORD = "Suma1221";
+const char* WIFI_SSID = "brando";
+const char* WIFI_PASSWORD = "here1234";
 const char* BACKEND_URL = "http://54.183.150.186:3001";
 
 // PIN DEFINITIONS
@@ -34,7 +34,7 @@ const unsigned long POLL_INTERVAL = 1500;  // Poll for commands every 1.5 second
 
 // Flash green LED and play success tone
 void goodRep() {
-  Serial.println("✓ Good rep!");
+  Serial.println(" Good rep!");
   
   // Green LED ON
   digitalWrite(GREEN_LED, HIGH);
@@ -166,12 +166,10 @@ void pollForCommands() {
           sessionActive = true;
           repCount = 0;
           
-          Serial.println("\\n========================================");
           Serial.println("\u2713 WORKOUT STARTED!");
           Serial.println("Session ID: " + currentSessionId);
           Serial.println("User ID: " + currentUserId);
           Serial.println("Waiting for reps from camera...");
-          Serial.println("========================================\\n");
           
           // Visual/audio feedback
           digitalWrite(GREEN_LED, HIGH);
@@ -182,11 +180,9 @@ void pollForCommands() {
           
         } else if (type == "stop") {
           // Handle stop workout
-          Serial.println("\\n========================================");
           Serial.println("\u2713 WORKOUT ENDED!");
           Serial.println("Final rep count: " + String(repCount));
           Serial.println("Session ID: " + currentSessionId);
-          Serial.println("========================================\\n");
           
           celebrationPattern();
           
@@ -202,11 +198,9 @@ void pollForCommands() {
           bool isCorrect = cmd["isCorrect"];
           String repDuration = cmd["repDuration"].as<String>();
           
-          Serial.println("\\n========================================");
           Serial.println("REP #" + String(repNumber));
           Serial.println("Form: " + String(isCorrect ? "GOOD" : "BAD"));
           Serial.println("Duration: " + repDuration + "s");
-          Serial.println("========================================\\n");
           
           repCount = repNumber;
           
@@ -223,13 +217,7 @@ void pollForCommands() {
   http.end();
 }
 
-
-
-
-
-// ============================================
 // SETUP
-// ============================================
 
 void setup() {
   Serial.begin(115200);
@@ -264,7 +252,7 @@ void setup() {
   }
   
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n✓ WiFi connected!");
+    Serial.println("\n WiFi connected!");
     Serial.println("IP Address: " + WiFi.localIP().toString());
     
     // Flash green LED to indicate WiFi success

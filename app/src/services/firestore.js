@@ -6,6 +6,7 @@ import {
   getDocs, 
   addDoc, 
   updateDoc, 
+  deleteDoc,
   query, 
   where, 
   orderBy,
@@ -22,7 +23,7 @@ export const getCurrentUserId = () => {
   return path.includes('/coach') ? BRANDON_ID : SEBASTIAN_ID;
 };
 
-// ===== USER OPERATIONS =====
+// USER OPERATIONS
 
 export const getUser = async (userId) => {
   const docRef = doc(db, 'users', userId);
@@ -35,7 +36,7 @@ export const getCurrentUser = async () => {
   return getUser(userId);
 };
 
-// ===== COACH-ATHLETE OPERATIONS =====
+// COACH-ATHLETE OPERATIONS
 
 export const getCoachAthletes = async (coachId) => {
   const q = query(collection(db, 'coachAthleteLinks'), where('coachId', '==', coachId));
@@ -75,7 +76,7 @@ export const updateCoachAthleteNotes = async (coachId, athleteId, overallCoachNo
   return { id: link.id, coachId, athleteId, overallCoachNotes };
 };
 
-// ===== EXERCISE OPERATIONS =====
+// EXERCISE OPERATIONS
 
 export const getExercises = async () => {
   const snapshot = await getDocs(collection(db, 'exercises'));
@@ -99,7 +100,7 @@ export const createExercise = async (exerciseData) => {
   return { id: docRef.id, ...exerciseData };
 };
 
-// ===== WORKOUT TEMPLATE OPERATIONS =====
+// WORKOUT TEMPLATE OPERATIONS
 
 export const getWorkoutTemplates = async (coachId) => {
   const q = query(collection(db, 'workoutTemplates'), where('coachId', '==', coachId));
@@ -118,7 +119,7 @@ export const createWorkoutTemplate = async (templateData) => {
   return { id: docRef.id, ...templateData };
 };
 
-// ===== ASSIGNED WORKOUT OPERATIONS =====
+// ASSIGNED WORKOUT OPERATIONS
 
 export const getAssignedWorkouts = async (athleteId) => {
   const q = query(
@@ -143,7 +144,7 @@ export const assignWorkoutToAthlete = async (workoutTemplateId, athleteId, start
   return { id: docRef.id, workoutTemplateId, athleteId, startDate, endDate, notes };
 };
 
-// ===== SESSION OPERATIONS =====
+// SESSION OPERATIONS
 
 export const getSessions = async (athleteId, filters = {}) => {
   try {
@@ -239,7 +240,26 @@ export const endSession = async (sessionId) => {
   }
 };
 
-// ===== REP OPERATIONS =====
+export const deleteSession = async (sessionId) => {
+  try {
+    // Delete all reps for this session
+    const reps = await getRepsForSession(sessionId);
+    for (const rep of reps) {
+      await deleteDoc(doc(db, 'reps', rep.id));
+    }
+    
+    // Delete the session
+    await deleteDoc(doc(db, 'sessions', sessionId));
+    
+    console.log('Session and associated reps deleted:', sessionId);
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting session:', error);
+    throw error;
+  }
+};
+
+// REP OPERATIONS
 
 export const getRepsForSession = async (sessionId) => {
   const q = query(
@@ -284,7 +304,7 @@ export const logReps = async (sessionId, repsData) => {
   return getSession(sessionId);
 };
 
-// ===== COACH OVERVIEW =====
+// COACH OVERVIEW
 
 export const getCoachOverview = async (coachId, dateRange = {}) => {
   const athletes = await getCoachAthletes(coachId);
@@ -310,7 +330,7 @@ export const getCoachOverview = async (coachId, dateRange = {}) => {
   return athleteStats;
 };
 
-// ===== ATHLETE PROGRESS =====
+// ATHLETE PROGRESS
 
 export const getAthleteProgress = async (athleteId, dateRange = {}) => {
   const sessions = await getSessions(athleteId, dateRange);
@@ -333,7 +353,7 @@ export const getAthleteProgress = async (athleteId, dateRange = {}) => {
   };
 };
 
-// ===== ATHLETE COACH NOTES =====
+// ATHLETE COACH NOTES
 
 export const getAthleteCoachNotes = async (athleteId) => {
   try {

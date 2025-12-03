@@ -6,7 +6,6 @@ const axios = require('axios');
 require('dotenv').config();
 
 const app = express();
-// Use sensible defaults so binding won't fail if a specific IP isn't present
 const PORT = process.env.PORT || 3001;
 const HOST = process.env.HOST;
 
@@ -14,7 +13,6 @@ const HOST = process.env.HOST;
 app.use(cors());
 app.use(express.json());
 
-// In production, you might store this in Redis or a database
 let hardwareState = {
   sessionActive: false,
   sessionId: null,
@@ -28,7 +26,6 @@ let hardwareState = {
 // Command queue for LILYGO to poll
 let pendingCommands = [];
 
-// ===== DEVICE REGISTRATION =====
 // TTGO calls this endpoint on startup to register its IP
 app.post('/api/device/register', (req, res) => {
   const { deviceIp, deviceId } = req.body;
@@ -44,7 +41,6 @@ app.post('/api/device/register', (req, res) => {
   });
 });
 
-// ===== DEVICE HEARTBEAT =====
 // TTGO pings this periodically to maintain connection status
 app.post('/api/device/heartbeat', (req, res) => {
   hardwareState.lastHeartbeat = new Date();
@@ -57,7 +53,6 @@ app.post('/api/device/heartbeat', (req, res) => {
   });
 });
 
-// ===== POLL FOR COMMANDS =====
 // LILYGO calls this to get pending commands
 app.get('/api/poll-commands', (req, res) => {
   // Return all pending commands and clear the queue
@@ -65,7 +60,7 @@ app.get('/api/poll-commands', (req, res) => {
   pendingCommands = [];
   
   if (commands.length > 0) {
-    console.log(`✓ Sending ${commands.length} command(s) to LILYGO`);
+    console.log(` Sending ${commands.length} command(s) to LILYGO`);
   }
   
   res.json({
@@ -74,7 +69,6 @@ app.get('/api/poll-commands', (req, res) => {
   });
 });
 
-// ===== START WORKOUT =====
 // React app calls this when user clicks "Start Workout"
 app.post('/api/start-workout', async (req, res) => {
   const { sessionId, userId } = req.body;
@@ -97,7 +91,7 @@ app.post('/api/start-workout', async (req, res) => {
       userId: userId,
       timestamp: Date.now()
     });
-    console.log('✓ START command queued for LILYGO');
+    console.log(' START command queued for LILYGO');
   }
   
   res.json({
@@ -110,7 +104,6 @@ app.post('/api/start-workout', async (req, res) => {
   });
 });
 
-// ===== END WORKOUT =====
 // React app calls this when user clicks "End Workout"
 app.post('/api/end-workout', async (req, res) => {
   const { sessionId } = req.body;
@@ -127,7 +120,7 @@ app.post('/api/end-workout', async (req, res) => {
       sessionId: sessionId,
       timestamp: Date.now()
     });
-    console.log('✓ STOP command queued for LILYGO');
+    console.log(' STOP command queued for LILYGO');
   }
   
   // Reset server state
@@ -143,7 +136,6 @@ app.post('/api/end-workout', async (req, res) => {
   });
 });
 
-// ===== FRONTEND REP CALLBACK =====
 // React app calls this when a rep is detected with form quality
 app.post('/api/rep-detected', async (req, res) => {
   const { sessionId, repNumber, isCorrect, repDuration } = req.body;
@@ -171,7 +163,7 @@ app.post('/api/rep-detected', async (req, res) => {
       repDuration: repDuration,
       timestamp: Date.now()
     });
-    console.log(`✓ REP FEEDBACK queued: ${isCorrect ? 'GREEN' : 'RED'}`);
+    console.log(` REP FEEDBACK queued: ${isCorrect ? 'GREEN' : 'RED'}`);
   }
   
   res.json({
@@ -181,7 +173,6 @@ app.post('/api/rep-detected', async (req, res) => {
   });
 });
 
-// ===== HARDWARE REP CALLBACK =====
 // TTGO calls this endpoint whenever a rep is completed
 app.post('/api/hardware-rep', (req, res) => {
   const { sessionId, repCount, deviceId, timestamp } = req.body;
@@ -199,9 +190,6 @@ app.post('/api/hardware-rep', (req, res) => {
   // Update rep count
   hardwareState.repCount = repCount;
   
-  // TODO: You could save this directly to Firestore here if desired
-  // For now, we just acknowledge the rep
-  
   res.json({
     success: true,
     message: 'Rep logged',
@@ -209,7 +197,6 @@ app.post('/api/hardware-rep', (req, res) => {
   });
 });
 
-// ===== GET HARDWARE STATUS =====
 // React app can call this to check hardware connection status
 app.get('/api/hardware-status', (req, res) => {
   // Check if device has sent heartbeat recently (within last 10 seconds)
@@ -226,7 +213,6 @@ app.get('/api/hardware-status', (req, res) => {
   });
 });
 
-// ===== GET CURRENT HARDWARE REPS =====
 // React app can poll this to get real-time hardware rep count
 app.get('/api/hardware-reps', (req, res) => {
   res.json({

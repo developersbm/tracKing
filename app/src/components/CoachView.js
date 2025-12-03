@@ -79,7 +79,7 @@ function CoachView() {
     try {
       const coachId = getCurrentUserId();
       await updateCoachAthleteNotes(coachId, selected, overallNote);
-      setToast("✓ Overall notes saved");
+      setToast(" Overall notes saved");
       setTimeout(() => setToast(null), 2000);
     } catch (error) {
       console.error('Error saving overall notes:', error);
@@ -102,7 +102,7 @@ function CoachView() {
         s.id === sessionId ? { ...s, coachNotes: noteText } : s
       ));
       
-      setToast("✓ Session note saved");
+      setToast(" Session note saved");
       setTimeout(() => setToast(null), 2000);
     } catch (error) {
       console.error('Error saving session note:', error);
@@ -220,7 +220,7 @@ function CoachView() {
                                 transition: 'all 0.2s'
                               }}
                             >
-                              {isExpanded ? '▼ Hide Notes' : '▶ Add/Edit Notes'}
+                              {isExpanded ? 'Hide Notes' : 'Add/Edit Notes'}
                             </button>
                           </div>
 
@@ -289,7 +289,7 @@ function CoachView() {
                                       gap: 6
                                     }}
                                   >
-                                    {isSaving ? '⏳ Saving...' : '✓ Save Notes'}
+                                    {isSaving ? '⏳ Saving...' : ' Save Notes'}
                                   </button>
                                 </div>
                               </div>
@@ -377,7 +377,7 @@ function CoachView() {
           position: 'fixed',
           bottom: 24,
           right: 24,
-          backgroundColor: toast.startsWith('✓') ? '#10b981' : '#ef4444',
+          backgroundColor: toast.startsWith('') ? '#10b981' : '#ef4444',
           color: 'white',
           padding: '12px 20px',
           borderRadius: 8,

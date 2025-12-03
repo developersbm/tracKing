@@ -74,7 +74,7 @@ function LiveView({ onUpdateStats, setIsTracking: setParentIsTracking, setWorkou
       const session = await createSession(athleteId, DEFAULT_EXERCISE_ID);
       currentSessionIdRef.current = session.id;
       
-      console.log('✓ Firestore session created:', session.id);
+      console.log('Firestore session created:', session.id);
       
       // 2. Notify backend to start hardware session
       try {
@@ -90,10 +90,10 @@ function LiveView({ onUpdateStats, setIsTracking: setParentIsTracking, setWorkou
         });
         
         const backendData = await backendResponse.json();
-        console.log('✓ Backend response:', backendData);
+        console.log(' Backend response:', backendData);
         
         if (backendData.hardwareConnected) {
-          console.log('✓ Hardware device started successfully!');
+          console.log(' Hardware device started successfully!');
         } else {
           console.warn('⚠ Hardware device not connected:', backendData.warning);
         }
@@ -110,7 +110,7 @@ function LiveView({ onUpdateStats, setIsTracking: setParentIsTracking, setWorkou
       repsBufferRef.current = [];
       if (onUpdateStats) onUpdateStats({ reps: 0 });
       
-      console.log('✓ Workout started successfully!');
+      console.log(' Workout started successfully!');
       
     } catch (error) {
       console.error('Error starting workout:', error);
@@ -147,7 +147,7 @@ function LiveView({ onUpdateStats, setIsTracking: setParentIsTracking, setWorkou
         });
         
         const backendData = await backendResponse.json();
-        console.log('✓ Backend stop response:', backendData);
+        console.log(' Backend stop response:', backendData);
         
         if (backendData.finalRepCount !== undefined) {
           console.log(`Hardware reported ${backendData.finalRepCount} reps`);

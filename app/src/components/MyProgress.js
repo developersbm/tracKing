@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect, useState } from "react";
 import SimpleBarChart from "./SimpleBarChart";
-import { getCurrentUserId, getAthleteProgress, getAthleteCoachNotes } from "../services/firestore";
+import { getCurrentUserId, getAthleteProgress, getAthleteCoachNotes, deleteSession } from "../services/firestore";
 
 function SummaryCard({ label, value }) {
   return (
@@ -36,6 +36,23 @@ function MyProgress() {
     };
     loadProgress();
   }, []);
+
+  const handleDeleteSession = async (sessionId) => {
+    if (!window.confirm('Are you sure you want to delete this workout session? This cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      await deleteSession(sessionId);
+      // Reload progress data
+      const athleteId = getCurrentUserId();
+      const data = await getAthleteProgress(athleteId);
+      setProgress(data);
+    } catch (error) {
+      console.error('Error deleting session:', error);
+      alert('Failed to delete session. Please try again.');
+    }
+  };
 
   const totals = useMemo(() => {
     if (!progress) return { workouts: 0, totalReps: 0, avgScore: 0 };
@@ -150,7 +167,7 @@ function MyProgress() {
                     {/* Main Session Info */}
                     <div style={{
                       display: 'grid',
-                      gridTemplateColumns: 'auto 1fr auto auto auto',
+                      gridTemplateColumns: 'auto 1fr auto auto auto auto',
                       gap: 16,
                       alignItems: 'center'
                     }}>
@@ -221,6 +238,37 @@ function MyProgress() {
                           {isExpanded ? 'Hide Feedback' : 'Show Feedback'}
                         </button>
                       )}
+
+                      {/* Delete Button */}
+                      <button
+                        onClick={() => handleDeleteSession(session.id)}
+                        style={{
+                          backgroundColor: 'transparent',
+                          color: '#ef4444',
+                          border: '1px solid var(--border)',
+                          padding: '6px 10px',
+                          borderRadius: 8,
+                          fontSize: '16px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'all 0.2s',
+                          minWidth: 36,
+                          minHeight: 32
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#ef4444';
+                          e.currentTarget.style.color = 'white';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                          e.currentTarget.style.color = '#ef4444';
+                        }}
+                        title="Delete workout"
+                      >
+                        🗑️
+                      </button>
                     </div>
 
                     {/* Coach Feedback Preview (when not expanded) */}
