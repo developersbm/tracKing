@@ -68,14 +68,49 @@ function LiveView({ onUpdateStats, setIsTracking: setParentIsTracking, setWorkou
     console.log('Starting workout...');
     try {
       const athleteId = getCurrentUserId();
+      
+      // 1. Create Firestore session
       const session = await createSession(athleteId, DEFAULT_EXERCISE_ID);
       currentSessionIdRef.current = session.id;
+      
+      console.log('✓ Firestore session created:', session.id);
+      
+      // 2. Notify backend to start hardware session
+      try {
+        const backendResponse = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/start-workout`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sessionId: session.id,
+            userId: athleteId
+          })
+        });
+        
+        const backendData = await backendResponse.json();
+        console.log('✓ Backend response:', backendData);
+        
+        if (backendData.hardwareConnected) {
+          console.log('✓ Hardware device started successfully!');
+        } else {
+          console.warn('⚠ Hardware device not connected:', backendData.warning);
+        }
+        
+      } catch (backendError) {
+        console.error('⚠ Backend communication failed:', backendError);
+        console.log('Continuing with software-only tracking...');
+      }
+      
+      // 3. Update local state
       if (setParentIsTracking) setParentIsTracking(true);
       isTrackingRef.current = true;
       counterRef.current = 0;
       repsBufferRef.current = [];
       if (onUpdateStats) onUpdateStats({ reps: 0 });
-      console.log('Workout started, session ID:', session.id);
+      
+      console.log('✓ Workout started successfully!');
+      
     } catch (error) {
       console.error('Error starting workout:', error);
       alert('Failed to start workout: ' + error.message);
@@ -87,23 +122,52 @@ function LiveView({ onUpdateStats, setIsTracking: setParentIsTracking, setWorkou
     if (!currentSessionIdRef.current) return;
     try {
       const totalReps = counterRef.current;
+      const sessionId = currentSessionIdRef.current;
+      
       console.log('Ending workout, total reps:', totalReps);
       console.log('Buffered reps to save:', repsBufferRef.current.length);
       
-      // Save any buffered reps
+      // 1. Save any buffered reps to Firestore
       if (repsBufferRef.current.length > 0) {
         console.log('Saving buffered reps...');
-        await logReps(currentSessionIdRef.current, repsBufferRef.current);
+        await logReps(sessionId, repsBufferRef.current);
       }
       
-      console.log('Finalizing session...');
-      await endSession(currentSessionIdRef.current);
+      // 2. Notify backend to stop hardware session
+      try {
+        const backendResponse = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/end-workout`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sessionId: sessionId
+          })
+        });
+        
+        const backendData = await backendResponse.json();
+        console.log('✓ Backend stop response:', backendData);
+        
+        if (backendData.finalRepCount !== undefined) {
+          console.log(`Hardware reported ${backendData.finalRepCount} reps`);
+        }
+        
+      } catch (backendError) {
+        console.error('⚠ Backend communication failed during stop:', backendError);
+      }
       
+      // 3. Finalize Firestore session
+      console.log('Finalizing Firestore session...');
+      await endSession(sessionId);
+      
+      // 4. Reset local state
       if (setParentIsTracking) setParentIsTracking(false);
       currentSessionIdRef.current = null;
       isTrackingRef.current = false;
       repsBufferRef.current = [];
+      
       alert(`Workout completed! Total reps: ${totalReps}`);
+      
     } catch (error) {
       console.error('Error ending workout:', error);
       alert('Failed to end workout: ' + error.message);
