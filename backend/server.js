@@ -25,6 +25,9 @@ let hardwareState = {
   lastHeartbeat: null
 };
 
+// Command queue for LILYGO to poll
+let pendingCommands = [];
+
 // ===== DEVICE REGISTRATION =====
 // TTGO calls this endpoint on startup to register its IP
 app.post('/api/device/register', (req, res) => {
@@ -54,6 +57,23 @@ app.post('/api/device/heartbeat', (req, res) => {
   });
 });
 
+// ===== POLL FOR COMMANDS =====
+// LILYGO calls this to get pending commands
+app.get('/api/poll-commands', (req, res) => {
+  // Return all pending commands and clear the queue
+  const commands = [...pendingCommands];
+  pendingCommands = [];
+  
+  if (commands.length > 0) {
+    console.log(`✓ Sending ${commands.length} command(s) to LILYGO`);
+  }
+  
+  res.json({
+    success: true,
+    commands: commands
+  });
+});
+
 // ===== START WORKOUT =====
 // React app calls this when user clicks "Start Workout"
 app.post('/api/start-workout', async (req, res) => {
@@ -69,25 +89,21 @@ app.post('/api/start-workout', async (req, res) => {
   
   const isHardwareConnected = hardwareState.deviceIp && hardwareState.isConnected;
   
-  // DIRECTLY notify LILYGO via POST to its IP
+  // Queue command for LILYGO to poll
   if (isHardwareConnected) {
-    try {
-      console.log(`Notifying LILYGO at ${hardwareState.deviceIp}`);
-      const lilygoResponse = await axios.post(
-        `http://${hardwareState.deviceIp}/start`,
-        { sessionId, userId },
-        { timeout: 5000 }
-      );
-      console.log('✓ LILYGO notified:', lilygoResponse.data);
-    } catch (error) {
-      console.error('✗ Failed to notify LILYGO:', error.message);
-    }
+    pendingCommands.push({
+      type: 'start',
+      sessionId: sessionId,
+      userId: userId,
+      timestamp: Date.now()
+    });
+    console.log('✓ START command queued for LILYGO');
   }
   
   res.json({
     success: true,
     message: isHardwareConnected 
-      ? 'Workout started and LILYGO notified' 
+      ? 'Workout started - LILYGO will be notified' 
       : 'Workout started on software only',
     hardwareConnected: isHardwareConnected,
     sessionId: sessionId
@@ -104,19 +120,14 @@ app.post('/api/end-workout', async (req, res) => {
   const finalRepCount = hardwareState.repCount;
   const isHardwareConnected = hardwareState.deviceIp && hardwareState.isConnected;
   
-  // DIRECTLY notify LILYGO via POST to its IP
+  // Queue command for LILYGO to poll
   if (isHardwareConnected) {
-    try {
-      console.log(`Notifying LILYGO to stop at ${hardwareState.deviceIp}`);
-      const lilygoResponse = await axios.post(
-        `http://${hardwareState.deviceIp}/stop`,
-        { sessionId },
-        { timeout: 5000 }
-      );
-      console.log('✓ LILYGO stop confirmed:', lilygoResponse.data);
-    } catch (error) {
-      console.error('✗ Failed to notify LILYGO stop:', error.message);
-    }
+    pendingCommands.push({
+      type: 'stop',
+      sessionId: sessionId,
+      timestamp: Date.now()
+    });
+    console.log('✓ STOP command queued for LILYGO');
   }
   
   // Reset server state
@@ -150,19 +161,17 @@ app.post('/api/rep-detected', async (req, res) => {
   // Update rep count
   hardwareState.repCount = repNumber;
   
-  // Forward to LILYGO for LED/buzzer feedback
+  // Queue rep feedback for LILYGO to poll
   const isHardwareConnected = hardwareState.deviceIp && hardwareState.isConnected;
   if (isHardwareConnected) {
-    try {
-      await axios.post(
-        `http://${hardwareState.deviceIp}/rep-feedback`,
-        { repNumber, isCorrect, repDuration },
-        { timeout: 3000 }
-      );
-      console.log(`✓ LILYGO feedback triggered: ${isCorrect ? 'GREEN' : 'RED'}`);
-    } catch (error) {
-      console.error('✗ Failed to send feedback to LILYGO:', error.message);
-    }
+    pendingCommands.push({
+      type: 'rep-feedback',
+      repNumber: repNumber,
+      isCorrect: isCorrect,
+      repDuration: repDuration,
+      timestamp: Date.now()
+    });
+    console.log(`✓ REP FEEDBACK queued: ${isCorrect ? 'GREEN' : 'RED'}`);
   }
   
   res.json({
