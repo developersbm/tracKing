@@ -205,7 +205,12 @@ void handleStart() {
       ledcWriteTone(BUZZER_CHANNEL, 0);
       digitalWrite(GREEN_LED, LOW);
       
-      Serial.println("Session started! Press button to count reps.");
+      Serial.println("\n========================================");
+      Serial.println("✓ WORKOUT STARTED!");
+      Serial.println("Session ID: " + currentSessionId);
+      Serial.println("User ID: " + currentUserId);
+      Serial.println("Waiting for reps from camera...");
+      Serial.println("========================================\n");
       
       // Send success response
       StaticJsonDocument<200> responseDoc;
@@ -227,7 +232,12 @@ void handleStart() {
 // Handle /stop command - called when user clicks "End Workout" in app
 void handleStop() {
   Serial.println("COMMAND: STOP WORKOUT");
+  
+  Serial.println("\n========================================");
+  Serial.println("✓ WORKOUT ENDED!");
   Serial.println("Final rep count: " + String(repCount));
+  Serial.println("Session ID: " + currentSessionId);
+  Serial.println("========================================\n");
   
   // Celebration pattern
   celebrationPattern();
@@ -251,6 +261,46 @@ void handleStop() {
   ledsOff();
   
   Serial.println("Session ended");
+}
+
+// Handle /rep-feedback - called by backend when frontend detects a rep
+void handleRepFeedback() {
+  Serial.println("COMMAND: REP FEEDBACK");
+  
+  if (server.hasArg("plain")) {
+    String body = server.arg("plain");
+    
+    StaticJsonDocument<300> doc;
+    DeserializationError error = deserializeJson(doc, body);
+    
+    if (!error) {
+      int repNumber = doc["repNumber"];
+      bool isCorrect = doc["isCorrect"];
+      String repDuration = doc["repDuration"].as<String>();
+      
+      Serial.println("\n========================================");
+      Serial.println("REP #" + String(repNumber));
+      Serial.println("Form: " + String(isCorrect ? "GOOD" : "BAD"));
+      Serial.println("Duration: " + repDuration + "s");
+      Serial.println("========================================\n");
+      
+      // Update local rep count
+      repCount = repNumber;
+      
+      // Trigger appropriate feedback
+      if (isCorrect) {
+        goodRep();
+      } else {
+        badRep();
+      }
+      
+      server.send(200, "application/json", "{\"success\":true}");
+    } else {
+      server.send(400, "application/json", "{\"success\":false,\"error\":\"Invalid JSON\"}");
+    }
+  } else {
+    server.send(400, "application/json", "{\"success\":false,\"error\":\"No body\"}");
+  }
 }
 
 // Handle /status request
@@ -360,6 +410,7 @@ void setup() {
     // Start web server to receive commands
     server.on("/start", HTTP_POST, handleStart);
     server.on("/stop", HTTP_POST, handleStop);
+    server.on("/rep-feedback", HTTP_POST, handleRepFeedback);
     server.on("/status", HTTP_GET, handleStatus);
     server.begin();
     

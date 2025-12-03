@@ -21,6 +21,7 @@ function LiveView({ onUpdateStats, setIsTracking: setParentIsTracking, setWorkou
   const isTrackingRef = useRef(false);
   const fullBodyVisibleRef = useRef(true);
   const lastRepIsCorrectRef = useRef(null); // Track last rep form quality
+  const repStartTimeRef = useRef(null); // Track when rep started
 
   // Helper: elbow angle in degrees at point b
   const calculateAngle = (a, b, c) => {
@@ -218,28 +219,54 @@ function LiveView({ onUpdateStats, setIsTracking: setParentIsTracking, setWorkou
           const computed = calculateAngle(shoulder, elbow, wrist);
           if (computed !== null && isFinite(computed)) {
             angle = computed;
-            // Rep logic
+            // Rep logic - time-based detection
             if (angle > 160) {
-              if (stageRef.current !== "down") stageRef.current = "down";
+              // Starting position (arm extended down)
+              if (stageRef.current !== "down") {
+                stageRef.current = "down";
+                repStartTimeRef.current = Date.now(); // Start timing the rep
+              }
             }
             if (angle < 30 && stageRef.current === "down") {
+              // Completion position (arm curled up)
               stageRef.current = "up";
               
               // Only count reps if tracking workout
-              if (isTrackingRef.current && currentSessionIdRef.current) {
+              if (isTrackingRef.current && currentSessionIdRef.current && repStartTimeRef.current) {
+                // Calculate rep duration in seconds
+                const repDuration = (Date.now() - repStartTimeRef.current) / 1000;
+                
+                // Good rep: 2-5 seconds, Bad rep: anything else
+                const isCorrect = repDuration >= 2 && repDuration <= 5;
+                const formScore = isCorrect ? 0.9 : 0.5;
+                
                 counterRef.current = counterRef.current + 1;
-                const formScore = angle > 150 ? 0.9 : 0.7; // Simple form scoring
-                const isCorrect = formScore >= 0.8;
                 const repData = {
                   repNumber: counterRef.current,
                   timestamp: new Date(),
                   formScore: formScore,
                   isCorrect: isCorrect,
+                  repDuration: repDuration.toFixed(2),
                   angleDown: Math.round(angle),
                   angleUp: null
                 };
                 repsBufferRef.current.push(repData);
                 lastRepIsCorrectRef.current = isCorrect; // Store last rep quality
+                
+                // Notify backend immediately for hardware feedback
+                fetch(`${process.env.REACT_APP_BACKEND_URL}/api/rep-detected`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    sessionId: currentSessionIdRef.current,
+                    repNumber: counterRef.current,
+                    isCorrect: isCorrect,
+                    repDuration: repDuration.toFixed(2)
+                  })
+                }).catch(err => console.error('Error notifying backend of rep:', err));
+                
+                // Reset rep timer
+                repStartTimeRef.current = null;
                 
                 // Save to Firestore every 5 reps
                 if (repsBufferRef.current.length >= 5) {

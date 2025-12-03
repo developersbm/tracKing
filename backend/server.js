@@ -8,7 +8,7 @@ require('dotenv').config();
 const app = express();
 // Use sensible defaults so binding won't fail if a specific IP isn't present
 const PORT = process.env.PORT || 3001;
-const HOST = process.env.HOST || '0.0.0.0';
+const HOST = process.env.HOST;
 
 // Middleware
 app.use(cors());
@@ -61,19 +61,33 @@ app.post('/api/start-workout', async (req, res) => {
   
   console.log(`Starting workout - Session: ${sessionId}, User: ${userId}`);
   
-  // Update server state (hardware will see this via heartbeat response)
+  // Update server state
   hardwareState.sessionActive = true;
   hardwareState.sessionId = sessionId;
   hardwareState.userId = userId;
   hardwareState.repCount = 0;
   
-  // Hardware will discover session is active via next heartbeat
   const isHardwareConnected = hardwareState.deviceIp && hardwareState.isConnected;
+  
+  // DIRECTLY notify LILYGO via POST to its IP
+  if (isHardwareConnected) {
+    try {
+      console.log(`Notifying LILYGO at ${hardwareState.deviceIp}`);
+      const lilygoResponse = await axios.post(
+        `http://${hardwareState.deviceIp}/start`,
+        { sessionId, userId },
+        { timeout: 5000 }
+      );
+      console.log('✓ LILYGO notified:', lilygoResponse.data);
+    } catch (error) {
+      console.error('✗ Failed to notify LILYGO:', error.message);
+    }
+  }
   
   res.json({
     success: true,
     message: isHardwareConnected 
-      ? 'Workout started (hardware will sync on next heartbeat)' 
+      ? 'Workout started and LILYGO notified' 
       : 'Workout started on software only',
     hardwareConnected: isHardwareConnected,
     sessionId: sessionId
@@ -88,8 +102,24 @@ app.post('/api/end-workout', async (req, res) => {
   console.log(`Ending workout - Session: ${sessionId}`);
   
   const finalRepCount = hardwareState.repCount;
+  const isHardwareConnected = hardwareState.deviceIp && hardwareState.isConnected;
   
-  // Reset server state (hardware will see this via next heartbeat)
+  // DIRECTLY notify LILYGO via POST to its IP
+  if (isHardwareConnected) {
+    try {
+      console.log(`Notifying LILYGO to stop at ${hardwareState.deviceIp}`);
+      const lilygoResponse = await axios.post(
+        `http://${hardwareState.deviceIp}/stop`,
+        { sessionId },
+        { timeout: 5000 }
+      );
+      console.log('✓ LILYGO stop confirmed:', lilygoResponse.data);
+    } catch (error) {
+      console.error('✗ Failed to notify LILYGO stop:', error.message);
+    }
+  }
+  
+  // Reset server state
   hardwareState.sessionActive = false;
   hardwareState.sessionId = null;
   hardwareState.userId = null;
@@ -99,6 +129,46 @@ app.post('/api/end-workout', async (req, res) => {
     success: true,
     message: 'Workout ended',
     finalRepCount
+  });
+});
+
+// ===== FRONTEND REP CALLBACK =====
+// React app calls this when a rep is detected with form quality
+app.post('/api/rep-detected', async (req, res) => {
+  const { sessionId, repNumber, isCorrect, repDuration } = req.body;
+  
+  console.log(`Rep detected - Session: ${sessionId}, Rep: ${repNumber}, Form: ${isCorrect ? 'GOOD' : 'BAD'}, Duration: ${repDuration}s`);
+  
+  // Verify session is active
+  if (!hardwareState.sessionActive || hardwareState.sessionId !== sessionId) {
+    return res.status(400).json({
+      success: false,
+      error: 'No active session or session mismatch'
+    });
+  }
+  
+  // Update rep count
+  hardwareState.repCount = repNumber;
+  
+  // Forward to LILYGO for LED/buzzer feedback
+  const isHardwareConnected = hardwareState.deviceIp && hardwareState.isConnected;
+  if (isHardwareConnected) {
+    try {
+      await axios.post(
+        `http://${hardwareState.deviceIp}/rep-feedback`,
+        { repNumber, isCorrect, repDuration },
+        { timeout: 3000 }
+      );
+      console.log(`✓ LILYGO feedback triggered: ${isCorrect ? 'GREEN' : 'RED'}`);
+    } catch (error) {
+      console.error('✗ Failed to send feedback to LILYGO:', error.message);
+    }
+  }
+  
+  res.json({
+    success: true,
+    message: 'Rep logged',
+    totalReps: hardwareState.repCount
   });
 });
 
